@@ -1,0 +1,112 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: networking
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: unbound-conf
+  namespace: networking
+data:
+  unbound.conf: |
+    server:
+      interface: 0.0.0.0
+      port: 5335
+      do-ip4: yes
+      do-udp: yes
+      do-tcp: yes
+      access-control: 127.0.0.0/8 allow
+      access-control: 10.0.0.0/8 allow
+      root-hints: "/var/lib/unbound/root.hints"
+      hide-identity: yes
+      hide-version: yes
+      harden-glue: yes
+      harden-dnssec-stripped: yes
+      use-caps-for-id: yes
+      cache-min-ttl: 3600
+      cache-max-ttl: 86400
+      prefetch: yes
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adguard-unbound
+  namespace: networking
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: adguard-dns
+  template:
+    metadata:
+      labels:
+        app: adguard-dns
+    spec:
+      containers:
+        # --- AdGuard Home ---
+        - name: adguard-home
+          image: adguard/adguardhome:latest
+          ports:
+            - containerPort: 53
+              protocol: UDP
+            - containerPort: 53
+              protocol: TCP
+            - containerPort: 80
+              protocol: TCP
+            - containerPort: 3000
+              protocol: TCP
+          volumeMounts:
+            - name: adguard-data
+              mountPath: /opt/adguardhome/work
+            - name: adguard-conf
+              mountPath: /opt/adguardhome/conf
+        # --- Unbound (Sidecar) ---
+        - name: unbound
+          image: mvance/unbound:latest
+          ports:
+            - containerPort: 5335
+              protocol: UDP
+          volumeMounts:
+            - name: unbound-config
+              mountPath: /opt/unbound/etc/unbound/unbound.conf
+              subPath: unbound.conf
+      volumes:
+        - name: unbound-config
+          configMap:
+            name: unbound-conf
+        - name: adguard-data
+          hostPath:
+            path: /mnt/data/adguard/work
+        - name: adguard-conf
+          hostPath:
+            path: /mnt/data/adguard/conf
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: adguard-service
+  namespace: networking
+spec:
+  selector:
+    app: adguard-dns
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  ports:
+    - name: dns-udp
+      port: 53
+      protocol: UDP
+      targetPort: 53
+    - name: dns-tcp
+      port: 53
+      protocol: TCP
+      targetPort: 53
+    - name: admin-ui
+      port: 80
+      protocol: TCP
+      targetPort: 80
+    - name: setup-ui
+      port: 3000
+      protocol: TCP
+      targetPort: 3000
