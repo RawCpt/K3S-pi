@@ -39,9 +39,8 @@ spec:
           ports:
             - containerPort: 8080
           env:
-            # Set this to your Pi's IP or leave blank for local-only
             - name: SEARXNG_BASE_URL
-              value: "http://192.168.10.144/"
+              value: "http://192.168.1.139/"
           volumeMounts:
             - name: config
               mountPath: /etc/searxng
@@ -61,5 +60,4 @@ spec:
     - protocol: TCP
       port: 8888
       targetPort: 8080
-  # LoadBalancer makes it accessible on the Pi's IP directly
   type: LoadBalancer
